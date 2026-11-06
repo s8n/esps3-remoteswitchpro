@@ -1,0 +1,16 @@
+{
+    "wifi": {
+        "ssid": "SSIDGoesHere",
+        "password": "password-goes-here"
+    },
+    "hostname": "remoteswitchpro",
+    "http_port": 80,
+    "token": "",
+    "log_level": "info",
+    "colors": {
+        "body": "#1B1B1D",
+        "buttons": "#FFFFFF",
+        "left_grip": "#EC008C",
+        "right_grip": "#EC008C"
+    }
+}

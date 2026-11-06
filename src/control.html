@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, user-scalable=no">
+<title>remoteswitchpro</title>
+<style>
+  :root { --bg: #f4f4f6; --fg: #1b1b1d; --pad: #fff; --btn: #2b2b2f; --btn-fg: #fff; --on: #ec008c; --muted: #6b6b73; --line: #d8d8de; }
+  @media (prefers-color-scheme: dark) {
+    :root { --bg: #151517; --fg: #ececf0; --pad: #222226; --btn: #3a3a40; --btn-fg: #fff; --muted: #9a9aa3; --line: #34343a; }
+  }
+  * { box-sizing: border-box; }
+  body { margin: 0; padding: 12px 16px 24px; background: var(--bg); color: var(--fg);
+         font-family: system-ui, sans-serif; -webkit-user-select: none; user-select: none; touch-action: manipulation; }
+  header { display: flex; flex-wrap: wrap; gap: 8px 16px; align-items: baseline; margin-bottom: 12px; }
+  h1 { font-size: 1.1rem; margin: 0; }
+  #status { font-size: .85rem; color: var(--muted); font-variant-numeric: tabular-nums; }
+  #status b { color: var(--fg); font-weight: 600; }
+  .pad { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; max-width: 720px; margin: 0 auto; }
+  .half { background: var(--pad); border: 1px solid var(--line); border-radius: 18px; padding: 12px;
+          display: flex; flex-direction: column; align-items: center; gap: 14px; }
+  .row { display: flex; gap: 8px; justify-content: center; }
+  button { font: inherit; font-weight: 600; border: 0; border-radius: 10px; background: var(--btn); color: var(--btn-fg);
+           min-width: 52px; height: 44px; padding: 0 10px; cursor: pointer; touch-action: none; }
+  button.on { background: var(--on); }
+  .round { border-radius: 50%; width: 52px; min-width: 0; padding: 0; }
+  .cross { display: grid; grid-template-columns: repeat(3, 52px); grid-template-rows: repeat(3, 52px); gap: 4px; }
+  .cross button { width: 52px; height: 52px; min-width: 0; padding: 0; }
+  .stick { width: 132px; height: 132px; border-radius: 50%; border: 2px solid var(--line); position: relative; touch-action: none; background: var(--bg); }
+  .knob { width: 52px; height: 52px; border-radius: 50%; background: var(--btn); position: absolute; left: 40px; top: 40px; pointer-events: none; }
+  .tools { max-width: 720px; margin: 14px auto 0; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; font-size: .9rem; }
+  .tools button { height: 36px; font-weight: 500; }
+  #err { color: #c0271d; font-size: .85rem; min-height: 1.2em; max-width: 720px; margin: 8px auto 0; }
+  a { color: inherit; }
+  @media (max-width: 520px) {
+    .pad { grid-template-columns: 1fr; }
+  }
+</style>
+</head>
+<body>
+<header>
+  <h1>remoteswitchpro</h1>
+  <div id="status">connecting…</div>
+</header>
+
+<div class="pad">
+  <div class="half">
+    <div class="row"><button data-b="zl">ZL</button><button data-b="l">L</button><button data-b="minus">−</button><button data-b="capture">◉</button></div>
+    <div class="stick" data-stick="left"><div class="knob"></div></div>
+    <div class="cross">
+      <span></span><button data-b="up">▲</button><span></span>
+      <button data-b="left">◀</button><button data-b="lstick">L3</button><button data-b="right">▶</button>
+      <span></span><button data-b="down">▼</button><span></span>
+    </div>
+  </div>
+  <div class="half">
+    <div class="row"><button data-b="home">⌂</button><button data-b="plus">+</button><button data-b="r">R</button><button data-b="zr">ZR</button></div>
+    <div class="cross">
+      <span></span><button class="round" data-b="x">X</button><span></span>
+      <button class="round" data-b="y">Y</button><button data-b="rstick">R3</button><button class="round" data-b="a">A</button>
+      <span></span><button class="round" data-b="b">B</button><span></span>
+    </div>
+    <div class="stick" data-stick="right"><div class="knob"></div></div>
+  </div>
+</div>
+
+<div class="tools">
+  <label><input type="checkbox" id="latch"> latch (tap to toggle, for combos)</label>
+  <button id="neutral">release all</button>
+  <a href="/api/logs" target="_blank">logs</a>
+  <a href="/api/status" target="_blank">status</a>
+</div>
+<div id="err"></div>
+
+<script>
+const token = new URLSearchParams(location.search).get('token');
+const headers = token ? { Authorization: 'Bearer ' + token } : {};
+const errEl = document.getElementById('err');
+function api(path, body) {
+  return fetch(path, { method: 'POST', headers: { ...headers, 'Content-Type': 'application/json' }, body: JSON.stringify(body ?? {}) })
+    .then(r => { if (!r.ok) return r.text().then(t => { throw new Error(r.status + ' ' + t); }); errEl.textContent = ''; })
+    .catch(e => { errEl.textContent = String(e); });
+}
+
+const latch = document.getElementById('latch');
+for (const el of document.querySelectorAll('button[data-b]')) {
+  const b = el.dataset.b;
+  let down = false;
+  const press = () => { if (down) return; down = true; el.classList.add('on'); api('/api/hold', { buttons: [b] }); };
+  const lift = () => { if (!down) return; down = false; el.classList.remove('on'); api('/api/release', { buttons: [b] }); };
+  el.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    if (latch.checked) { down ? lift() : press(); return; }
+    el.setPointerCapture(e.pointerId); press();
+  });
+  for (const ev of ['pointerup', 'pointercancel', 'lostpointercapture'])
+    el.addEventListener(ev, () => { if (!latch.checked) lift(); });
+}
+
+document.getElementById('neutral').addEventListener('click', () => {
+  for (const el of document.querySelectorAll('button.on')) el.classList.remove('on');
+  api('/api/neutral');
+  location.reload();
+});
+
+for (const pad of document.querySelectorAll('.stick')) {
+  const knob = pad.querySelector('.knob');
+  const stick = pad.dataset.stick;
+  let pending = null, inflight = false, last = '';
+  const flush = () => {
+    if (inflight || !pending) return;
+    const p = pending; pending = null;
+    const key = p.x.toFixed(2) + ',' + p.y.toFixed(2);
+    if (key === last) return;
+    last = key; inflight = true;
+    api('/api/stick', { stick, x: p.x, y: p.y }).finally(() => { inflight = false; flush(); });
+  };
+  const move = e => {
+    const r = pad.getBoundingClientRect();
+    const radius = r.width / 2;
+    let dx = (e.clientX - r.left - radius) / (radius - 26);
+    let dy = (e.clientY - r.top - radius) / (radius - 26);
+    const len = Math.hypot(dx, dy);
+    if (len > 1) { dx /= len; dy /= len; }
+    knob.style.transform = `translate(${dx * (radius - 26)}px, ${dy * (radius - 26)}px)`;
+    pending = { x: dx, y: -dy }; flush();
+  };
+  pad.addEventListener('pointerdown', e => { e.preventDefault(); pad.setPointerCapture(e.pointerId); move(e); });
+  pad.addEventListener('pointermove', e => { if (pad.hasPointerCapture(e.pointerId)) move(e); });
+  const center = () => { knob.style.transform = ''; pending = { x: 0, y: 0 }; flush(); };
+  pad.addEventListener('pointerup', center);
+  pad.addEventListener('pointercancel', center);
+}
+
+const keymap = { ArrowUp: 'up', ArrowDown: 'down', ArrowLeft: 'left', ArrowRight: 'right', x: 'a', z: 'b', s: 'x', a: 'y',
+                 q: 'l', w: 'r', '1': 'zl', '2': 'zr', Enter: 'plus', Backspace: 'minus', h: 'home', c: 'capture' };
+const held = new Set();
+addEventListener('keydown', e => {
+  const b = keymap[e.key]; if (!b || held.has(b) || e.repeat) return;
+  e.preventDefault(); held.add(b); api('/api/hold', { buttons: [b] });
+  document.querySelector(`button[data-b="${b}"]`)?.classList.add('on');
+});
+addEventListener('keyup', e => {
+  const b = keymap[e.key]; if (!b || !held.has(b)) return;
+  held.delete(b); api('/api/release', { buttons: [b] });
+  document.querySelector(`button[data-b="${b}"]`)?.classList.remove('on');
+});
+
+const statusEl = document.getElementById('status');
+function lights(v) { let s = ''; for (let i = 0; i < 4; i++) s += (v >> i) & 1 ? '●' : ((v >> (i + 4)) & 1 ? '◐' : '○'); return s; }
+async function poll() {
+  try {
+    const r = await fetch('/api/status' + (token ? '?token=' + encodeURIComponent(token) : ''));
+    const s = await r.json();
+    const u = s.usb;
+    const link = !u.configured ? 'not connected' : u.suspended ? 'console asleep' : u.streaming ? 'connected' : 'handshaking';
+    statusEl.innerHTML = `USB: <b>${link}</b> · player <b>${lights(u.player_lights)}</b> · up ${s.uptime_s}s`;
+  } catch (e) { statusEl.textContent = 'device unreachable'; }
+  setTimeout(poll, 2000);
+}
+poll();
+</script>
+</body>
+</html>

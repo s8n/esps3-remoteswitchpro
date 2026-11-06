@@ -1,0 +1,4 @@
+target/
+
+# personal configuration (baked into the firmware)
+config.json
